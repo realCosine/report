@@ -10,26 +10,26 @@ from src.report import load_config
 
 config = load_config()
 
-base_directory = config["common"]["base_directory"]
+base_directory = config["base_directory"]
 specific_directory = os.path.join(
-    base_directory, config["common"]["specific_directory"]
+    base_directory, config["specific_directory"]
 )
 output_directory = os.path.join(
-    specific_directory, config["modules"]["report"]["output_directory_suffix"]
+    specific_directory, config["output_directory_suffix"]
 )
 output_directory_specific = os.path.join(
     specific_directory,
-    config["modules"]["report"]["output_directory_suffix_specific"],
+    config["output_directory_suffix_specific"],
 )
 
 os.makedirs(output_directory, exist_ok=True)
 os.makedirs(output_directory_specific, exist_ok=True)
 
 is_csv_file = os.path.join(
-    specific_directory, config["common"]["output_files"]["is_csv_file"]
+    specific_directory, config["output_files"]["is_csv_file"]
 )
 oos_csv_file = os.path.join(
-    specific_directory, config["common"]["output_files"]["oos_csv_file"]
+    specific_directory, config["output_files"]["oos_csv_file"]
 )
 
 is_df = pd.read_csv(is_csv_file)
@@ -108,8 +108,8 @@ def generate_quantstats_reports(is_data, oos_data):
 
 
 def generate_quantstats_reports_specific(is_df, oos_df):
-    add_periods = config["modules"]["report"].get("add", {})
-    remove_markets = config["modules"]["report"].get("remove", [])
+    add_periods = config.get("add", {})
+    remove_markets = config.get("remove", [])
 
     best_periods = {}
     all_returns_is = None
