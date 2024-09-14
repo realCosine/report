@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from itertools import product
 
-from src import load_config
+from src.report import load_config
 
 config = load_config()
 
