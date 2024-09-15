@@ -57,6 +57,9 @@ def prepare_market_data(df):
 
 
 def generate_quantstats_reports(is_data, oos_data):
+    if config["generate_general"] is False:
+        return
+
     combined_returns = None
 
     markets = is_df["Market"].unique()
@@ -108,8 +111,11 @@ def generate_quantstats_reports(is_data, oos_data):
 
 
 def generate_quantstats_reports_specific(is_df, oos_df):
-    add_periods = config.get("add", {})
-    remove_markets = config.get("remove", [])
+    if config["generate_specific"] is False:
+        return
+
+    add_periods = config["specific"].get("add", {})
+    remove_markets = config["specific"].get("remove", [])
 
     best_periods = {}
     all_returns_is = None
