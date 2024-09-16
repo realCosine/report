@@ -11,12 +11,8 @@ from src.report import load_config
 config = load_config()
 
 base_directory = config["base_directory"]
-specific_directory = os.path.join(
-    base_directory, config["specific_directory"]
-)
-output_directory = os.path.join(
-    specific_directory, config["output_directory_suffix"]
-)
+specific_directory = os.path.join(base_directory, config["specific_directory"])
+output_directory = os.path.join(specific_directory, config["output_directory_suffix"])
 output_directory_specific = os.path.join(
     specific_directory,
     config["output_directory_suffix_specific"],
@@ -25,12 +21,8 @@ output_directory_specific = os.path.join(
 os.makedirs(output_directory, exist_ok=True)
 os.makedirs(output_directory_specific, exist_ok=True)
 
-is_csv_file = os.path.join(
-    specific_directory, config["output_files"]["is_csv_file"]
-)
-oos_csv_file = os.path.join(
-    specific_directory, config["output_files"]["oos_csv_file"]
-)
+is_csv_file = os.path.join(specific_directory, config["output_files"]["is_csv_file"])
+oos_csv_file = os.path.join(specific_directory, config["output_files"]["oos_csv_file"])
 
 is_df = pd.read_csv(is_csv_file)
 oos_df = pd.read_csv(oos_csv_file)
