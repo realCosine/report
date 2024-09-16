@@ -94,6 +94,17 @@ def generate_quantstats_reports(is_data, oos_data):
             )
             qs.reports.html(is_returns, output=is_report)
 
+            is_until_oos_returns = is_returns[
+                is_returns.index <= oos_returns.index.min()
+            ]
+
+            if not is_until_oos_returns.empty:
+                is_until_oos_report = os.path.join(
+                    output_directory_specific,
+                    f"{market}_{lookback_period}_is_until_oos_report.html",
+                )
+                qs.reports.html(is_until_oos_returns, output=is_until_oos_report)
+
         if not combined_returns.empty:
             combined_report = os.path.join(
                 market_output_directory,
@@ -219,6 +230,17 @@ def generate_quantstats_reports_specific(is_df, oos_df):
             )
             qs.reports.html(is_returns, output=is_report)
 
+            is_until_oos_returns = is_returns[
+                is_returns.index <= oos_returns.index.min()
+            ]
+
+            if not is_until_oos_returns.empty:
+                is_until_oos_report = os.path.join(
+                    output_directory_specific,
+                    f"{market}_{best_lookback_period}_best_is_until_oos_report.html",
+                )
+                qs.reports.html(is_until_oos_returns, output=is_until_oos_report)
+
         if not is_then_oos_returns.empty:
             if all_returns_is_then_oos is None:
                 all_returns_is_then_oos = is_then_oos_returns
@@ -243,6 +265,21 @@ def generate_quantstats_reports_specific(is_df, oos_df):
             output=all_returns_is_path,
             title="All IS Returns (Best Lookback)",
         )
+
+        all_returns_is_until_oos = all_returns_is[
+            all_returns_is.index <= all_returns_oos.index.min()
+        ]
+
+        if all_returns_is_until_oos is not None:
+            all_returns_is_until_oos_path = os.path.join(
+                output_directory_specific, "_all_returns_is_until_oos.html"
+            )
+
+            qs.reports.html(
+                all_returns_is_until_oos,
+                output=all_returns_is_until_oos_path,
+                title="All IS Returns until OOS begins (Best Lookback)",
+            )
 
     if all_returns_is_then_oos is not None:
         all_returns_is_then_oos = all_returns_is_then_oos.fillna(0).sort_index()
