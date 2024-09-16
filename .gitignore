@@ -9,4 +9,3 @@ venv/
 *.out
 .vscode/
 .idea/
-.config
