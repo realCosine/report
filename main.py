@@ -48,7 +48,7 @@ def prepare_market_data(df):
     return df["ProfitPercent"].fillna(0).sort_index()
 
 
-def generate_quantstats_reports(is_data, oos_data):
+def generate_quantstats_reports(is_df, oos_df):
     if config["generate_general"] is False:
         return
 
@@ -100,7 +100,7 @@ def generate_quantstats_reports(is_data, oos_data):
 
             if not is_until_oos_returns.empty:
                 is_until_oos_report = os.path.join(
-                    output_directory_specific,
+                    market_output_directory,
                     f"{market}_{lookback_period}_is_until_oos_report.html",
                 )
                 qs.reports.html(is_until_oos_returns, output=is_until_oos_report)
@@ -304,5 +304,5 @@ def generate_quantstats_reports_specific(is_df, oos_df):
         )
 
 
-generate_quantstats_reports_specific(is_df, oos_df)
-generate_quantstats_reports(is_df, oos_df)
+generate_quantstats_reports_specific(is_df.copy(), oos_df.copy())
+generate_quantstats_reports(is_df.copy(), oos_df.copy())
