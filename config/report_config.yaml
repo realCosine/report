@@ -1,0 +1,9 @@
+generate_general: true
+generate_specific: true
+output_directory_suffix: "_report"
+output_directory_suffix_specific: "_report_specific"
+specific:
+  add: {}
+  remove:
+    - "NG"
+    - "RTY"

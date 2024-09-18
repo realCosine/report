@@ -2,62 +2,24 @@ import os
 import json
 import quantstats as qs
 import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 from itertools import product
 
-from src.report import load_config
-
-config = load_config()
-
-base_directory = config["base_directory"]
-specific_directory = os.path.join(base_directory, config["specific_directory"])
-output_directory = os.path.join(specific_directory, config["output_directory_suffix"])
-output_directory_specific = os.path.join(
-    specific_directory,
-    config["output_directory_suffix_specific"],
-)
-
-os.makedirs(output_directory, exist_ok=True)
-os.makedirs(output_directory_specific, exist_ok=True)
-
-is_csv_file = os.path.join(specific_directory, config["output_files"]["is_csv_file"])
-oos_csv_file = os.path.join(specific_directory, config["output_files"]["oos_csv_file"])
-
-is_df = pd.read_csv(is_csv_file)
-oos_df = pd.read_csv(oos_csv_file)
+from src.report import *
 
 qs.extend_pandas()
 
 
-def sharpe(returns, rf=0.0, periods=252, annualize=True, smart=False):
-    divisor = returns.std(ddof=1)
-    if smart:
-        divisor = divisor * qs.stats.autocorr_penalty(returns)
-    res = returns.mean() / divisor
-    if annualize:
-        return res * np.sqrt(periods if periods else 1)
-    return res
-
-
-def prepare_market_data(df):
-    df["LimitCreated"] = pd.to_datetime(df["LimitCreated"])
-    df["ProfitPercent"] = df["ProfitPercent"] * 0.01
-    df = df[["LimitCreated", "ProfitPercent"]]
-    df.set_index("LimitCreated", inplace=True)
-    return df["ProfitPercent"].fillna(0).sort_index()
-
-
-def generate_quantstats_reports(is_df, oos_df):
-    if config["generate_general"] is False:
+def generate_quantstats_reports(cfg: Config, is_df, oos_df):
+    if cfg.report.generate_general is False:
         return
 
     combined_returns = None
-
     markets = is_df["Market"].unique()
 
+    output_directory = cfg.report.output_dir_general
     for market, lookback_period in product(markets, is_df["IS_QuarterCount"].unique()):
-        market_output_directory = os.path.join(output_directory, market)
+        market_output_directory = output_directory / market
         os.makedirs(market_output_directory, exist_ok=True)
 
         is_market_data = is_df[
@@ -68,10 +30,10 @@ def generate_quantstats_reports(is_df, oos_df):
             & (oos_df["IS_QuarterCount"] == lookback_period)
         ]
 
-        is_returns = prepare_market_data(is_market_data).loc[
-            ~prepare_market_data(is_market_data).index.duplicated(keep="first")
+        is_returns = prepare_df_for_sharpe(is_market_data).loc[
+            ~prepare_df_for_sharpe(is_market_data).index.duplicated(keep="first")
         ]
-        oos_returns = prepare_market_data(oos_market_data)
+        oos_returns = prepare_df_for_sharpe(oos_market_data)
 
         if not oos_returns.empty:
             switch_date = oos_returns.index[0]
@@ -79,19 +41,18 @@ def generate_quantstats_reports(is_df, oos_df):
                 [is_returns[is_returns.index < switch_date], oos_returns]
             )
 
-            oos_report = os.path.join(
-                market_output_directory,
-                f"{market}_{lookback_period}_oos_report.html",
+            oos_report = (
+                market_output_directory / f"{market}_{lookback_period}_oos_report.html"
             )
             qs.reports.html(oos_returns, output=oos_report)
         else:
             combined_returns = is_returns
 
         if not is_returns.empty:
-            is_report = os.path.join(
-                market_output_directory,
-                f"{market}_{lookback_period}_is_report.html",
+            is_report = (
+                market_output_directory / f"{market}_{lookback_period}_is_report.html"
             )
+
             qs.reports.html(is_returns, output=is_report)
 
             is_until_oos_returns = is_returns[
@@ -99,31 +60,32 @@ def generate_quantstats_reports(is_df, oos_df):
             ]
 
             if not is_until_oos_returns.empty:
-                is_until_oos_report = os.path.join(
-                    market_output_directory,
-                    f"{market}_{lookback_period}_is_until_oos_report.html",
+                is_until_oos_report = (
+                    market_output_directory
+                    / f"{market}_{lookback_period}_is_until_oos_report.html"
                 )
                 qs.reports.html(is_until_oos_returns, output=is_until_oos_report)
 
         if not combined_returns.empty:
-            combined_report = os.path.join(
-                market_output_directory,
-                f"{market}_{lookback_period}_is_then_oos_report.html",
+            combined_report = (
+                market_output_directory
+                / f"{market}_{lookback_period}_is_then_oos_report.html"
             )
             qs.reports.html(combined_returns, output=combined_report)
 
 
-def generate_quantstats_reports_specific(is_df, oos_df):
-    if config["generate_specific"] is False:
+def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
+    if cfg.report.generate_specific is False:
         return
 
-    add_periods = config["specific"].get("add", {})
-    remove_markets = config["specific"].get("remove", [])
+    specific_dir = cfg.report.output_dir_specific
+    add_periods = cfg.report.specific.add_markets
+    remove_markets = cfg.report.specific.remove_markets
 
     best_periods = {}
     all_returns_is = None
-    all_returns_is_then_oos = None
     all_returns_oos = None
+    all_returns_is_then_oos = None
 
     cutoff_date = datetime.now() - timedelta(days=365 * 2)
 
@@ -153,10 +115,10 @@ def generate_quantstats_reports_specific(is_df, oos_df):
             if is_market_data.empty:
                 continue
 
-            is_returns = prepare_market_data(is_market_data).loc[
-                ~prepare_market_data(is_market_data).index.duplicated(keep="first")
+            is_returns = prepare_df_for_sharpe(is_market_data).loc[
+                ~prepare_df_for_sharpe(is_market_data).index.duplicated(keep="first")
             ]
-            oos_returns = prepare_market_data(oos_market_data)
+            oos_returns = prepare_df_for_sharpe(oos_market_data)
 
             if not oos_returns.empty:
                 if oos_returns.index[-1] < cutoff_date:
@@ -180,7 +142,7 @@ def generate_quantstats_reports_specific(is_df, oos_df):
         if best_lookback_period is not None:
             best_periods[market] = int(best_lookback_period)
 
-    best_periods_file_path = os.path.join(specific_directory, "best_periods.json")
+    best_periods_file_path = cfg.core.output_dir / "best_periods.json"
     with open(best_periods_file_path, "w") as json_file:
         json.dump(best_periods, json_file, indent=4)
 
@@ -196,10 +158,10 @@ def generate_quantstats_reports_specific(is_df, oos_df):
             & (oos_df["IS_QuarterCount"] == best_lookback_period)
         ]
 
-        is_returns = prepare_market_data(is_market_data).loc[
-            ~prepare_market_data(is_market_data).index.duplicated(keep="first")
+        is_returns = prepare_df_for_sharpe(is_market_data).loc[
+            ~prepare_df_for_sharpe(is_market_data).index.duplicated(keep="first")
         ]
-        oos_returns = prepare_market_data(oos_market_data)
+        oos_returns = prepare_df_for_sharpe(oos_market_data)
 
         if not oos_returns.empty:
             switch_date = oos_returns.index[0]
@@ -212,9 +174,8 @@ def generate_quantstats_reports_specific(is_df, oos_df):
             else:
                 all_returns_oos = all_returns_oos.add(oos_returns, fill_value=0)
 
-            oos_report = os.path.join(
-                output_directory_specific,
-                f"{market}_{best_lookback_period}_best_oos_report.html",
+            oos_report = (
+                specific_dir / f"{market}_{best_lookback_period}_best_oos_report.html"
             )
             qs.reports.html(oos_returns, output=oos_report)
 
@@ -224,9 +185,8 @@ def generate_quantstats_reports_specific(is_df, oos_df):
             else:
                 all_returns_is = all_returns_is.add(is_returns, fill_value=0)
 
-            is_report = os.path.join(
-                output_directory_specific,
-                f"{market}_{best_lookback_period}_best_is_report.html",
+            is_report = (
+                specific_dir / f"{market}_{best_lookback_period}_best_is_report.html"
             )
             qs.reports.html(is_returns, output=is_report)
 
@@ -235,9 +195,9 @@ def generate_quantstats_reports_specific(is_df, oos_df):
             ]
 
             if not is_until_oos_returns.empty:
-                is_until_oos_report = os.path.join(
-                    output_directory_specific,
-                    f"{market}_{best_lookback_period}_best_is_until_oos_report.html",
+                is_until_oos_report = (
+                    specific_dir
+                    / f"{market}_{best_lookback_period}_best_is_until_oos_report.html"
                 )
                 qs.reports.html(is_until_oos_returns, output=is_until_oos_report)
 
@@ -249,17 +209,16 @@ def generate_quantstats_reports_specific(is_df, oos_df):
                     is_then_oos_returns, fill_value=0
                 )
 
-            combined_report = os.path.join(
-                output_directory_specific,
-                f"{market}_{best_lookback_period}_best_is_then_oos_report.html",
+            combined_report = (
+                specific_dir
+                / f"{market}_{best_lookback_period}_best_is_then_oos_report.html"
             )
             qs.reports.html(is_then_oos_returns, output=combined_report)
 
     if all_returns_is is not None:
         all_returns_is = all_returns_is.fillna(0).sort_index()
-        all_returns_is_path = os.path.join(
-            output_directory_specific, "_all_returns_is.html"
-        )
+        all_returns_is_path = specific_dir / "_all_returns_is.html"
+
         qs.reports.html(
             all_returns_is,
             output=all_returns_is_path,
@@ -271,10 +230,10 @@ def generate_quantstats_reports_specific(is_df, oos_df):
         ]
 
         if all_returns_is_until_oos is not None:
-            all_returns_is_until_oos_path = os.path.join(
-                output_directory_specific, "_all_returns_is_until_oos.html"
-            )
 
+            all_returns_is_until_oos_path = (
+                specific_dir / "_all_returns_is_until_oos.html"
+            )
             qs.reports.html(
                 all_returns_is_until_oos,
                 output=all_returns_is_until_oos_path,
@@ -283,9 +242,8 @@ def generate_quantstats_reports_specific(is_df, oos_df):
 
     if all_returns_is_then_oos is not None:
         all_returns_is_then_oos = all_returns_is_then_oos.fillna(0).sort_index()
-        all_returns_is_then_oos_path = os.path.join(
-            output_directory_specific, "_all_returns_is_then_oos.html"
-        )
+        all_returns_is_then_oos_path = specific_dir / "_all_returns_is_then_oos.html"
+
         qs.reports.html(
             all_returns_is_then_oos,
             output=all_returns_is_then_oos_path,
@@ -294,9 +252,8 @@ def generate_quantstats_reports_specific(is_df, oos_df):
 
     if all_returns_oos is not None:
         all_returns_oos = all_returns_oos.fillna(0).sort_index()
-        all_returns_oos_path = os.path.join(
-            output_directory_specific, "_all_returns_oos.html"
-        )
+        all_returns_oos_path = specific_dir / "_all_returns_oos.html"
+
         qs.reports.html(
             all_returns_oos,
             output=all_returns_oos_path,
@@ -304,5 +261,11 @@ def generate_quantstats_reports_specific(is_df, oos_df):
         )
 
 
-generate_quantstats_reports_specific(is_df.copy(), oos_df.copy())
-generate_quantstats_reports(is_df.copy(), oos_df.copy())
+if __name__ == "__main__":
+    cfg = load_config()
+
+    is_df = pd.read_csv(cfg.core.is_dir)
+    oos_df = pd.read_csv(cfg.core.oos_dir)
+
+    generate_quantstats_reports_specific(cfg, is_df.copy(), oos_df.copy())
+    generate_quantstats_reports(cfg, is_df.copy(), oos_df.copy())
