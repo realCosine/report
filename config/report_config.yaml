@@ -1,9 +1,12 @@
-generate_general: true
-generate_specific: true
-output_directory_suffix: "_report"
-output_directory_suffix_specific: "_report_specific"
+generate_general: false
+generate_specific: false
 specific:
   add: {}
   remove:
     - "NG"
     - "RTY"
+
+combine_systems:
+  enable: true
+  other_systems_dirs: 
+    - "/root/dev/VPAlgo-LimitH2-V1/results/V1.0/V5.0 mit Zeitfilter Sharpe als Berechnung"

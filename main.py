@@ -4,6 +4,7 @@ import quantstats as qs
 import pandas as pd
 from datetime import datetime, timedelta
 from itertools import product
+from pathlib import Path
 
 from src.report import *
 
@@ -261,6 +262,262 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
         )
 
 
+def combine_systems(cfg: Config, main_is_df: pd.DataFrame, main_oos_df: pd.DataFrame):
+    """
+    Combines multiple systems' in-sample and out-of-sample DataFrames to generate
+    aggregated QuantStats reports per market.
+
+    Args:
+        cfg (Config): Configuration object containing report settings.
+        main_is_df (pd.DataFrame): Main in-sample DataFrame.
+        main_oos_df (pd.DataFrame): Main out-of-sample DataFrame.
+    """
+    if not cfg.report.combine_systems.enable:
+        return
+
+    other_dirs = cfg.report.combine_systems.other_systems_dirs
+    output_dir = cfg.report.output_dir_combined
+
+    systems = []
+    systems.append(
+        {"path": cfg.core.output_dir, "is_df": main_is_df, "oos_df": main_oos_df}
+    )
+
+    for dir_path in other_dirs:
+        is_path = dir_path / cfg.core.is_file_name
+        oos_path = dir_path / cfg.core.oos_file_name
+
+        if not is_path.exists() or not oos_path.exists():
+            print(
+                f"Missing is_data.csv or oos_data.csv in {dir_path}. Skipping this system."
+            )
+            continue
+
+        system_is_df = pd.read_csv(is_path, parse_dates=True, index_col=0)
+        system_oos_df = pd.read_csv(oos_path, parse_dates=True, index_col=0)
+
+        systems.append(
+            {
+                "path": dir_path,
+                "is_df": system_is_df,
+                "oos_df": system_oos_df,
+            }
+        )
+
+    best_periods = {}
+    cutoff_date = datetime.now() - timedelta(days=365 * 2)
+
+    for system in systems:
+        system_path = system["path"]
+        is_df = system["is_df"]
+        oos_df = system["oos_df"]
+
+        for market in is_df["Market"].unique():
+            best_lookback_period = None
+            best_combined_sharpe = float("-inf")
+
+            for lookback_period in is_df["IS_QuarterCount"].unique():
+                is_market_data = is_df[
+                    (is_df["Market"] == market)
+                    & (is_df["IS_QuarterCount"] == lookback_period)
+                ]
+                oos_market_data = oos_df[
+                    (oos_df["Market"] == market)
+                    & (oos_df["IS_QuarterCount"] == lookback_period)
+                ]
+
+                if is_market_data.empty:
+                    continue
+
+                is_returns = prepare_df_for_sharpe(is_market_data).loc[
+                    ~prepare_df_for_sharpe(is_market_data).index.duplicated(
+                        keep="first"
+                    )
+                ]
+                oos_returns = prepare_df_for_sharpe(oos_market_data)
+
+                if not oos_returns.empty:
+                    if oos_returns.index[-1] < cutoff_date:
+                        continue
+
+                    switch_date = oos_returns.index[0]
+                    is_then_oos_returns = pd.concat(
+                        [is_returns[is_returns.index < switch_date], oos_returns]
+                    )
+
+                    oos_sharpe = sharpe(oos_returns)
+                    is_then_oos_sharpe = sharpe(is_then_oos_returns)
+
+                    if oos_sharpe > 2 and is_then_oos_sharpe > 2:
+                        combined_sharpe = 0.6 * oos_sharpe + 0.4 * is_then_oos_sharpe
+
+                        if combined_sharpe > best_combined_sharpe:
+                            best_combined_sharpe = combined_sharpe
+                            best_lookback_period = lookback_period
+
+            if best_lookback_period is not None:
+                if market not in best_periods:
+                    best_periods[market] = {}
+
+                if best_lookback_period is not None:
+                    best_periods[market][system_path] = int(best_lookback_period)
+
+    best_periods_file_path = output_dir / "best_periods.json"
+    with open(best_periods_file_path, "w") as json_file:
+        json.dump(parse_posix_paths(best_periods), json_file, indent=4)
+
+    total_combined_is_returns = None
+    total_combined_oos_returns = None
+    total_combined_is_then_oos_returns = None
+
+    for market in best_periods:
+        market_combined_is_returns = None
+        market_combined_oos_returns = None
+        market_combined_is_then_oos_returns = None
+
+        for system_path_str in best_periods[market]:
+            system_path = Path(system_path_str)
+            best_lookback_period = best_periods[market][system_path_str]
+            system = next((s for s in systems if s["path"] == system_path), None)
+            if system is None:
+                continue
+
+            is_df = system["is_df"]
+            oos_df = system["oos_df"]
+            is_market_data = is_df[
+                (is_df["Market"] == market)
+                & (is_df["IS_QuarterCount"] == best_lookback_period)
+            ]
+            oos_market_data = oos_df[
+                (oos_df["Market"] == market)
+                & (oos_df["IS_QuarterCount"] == best_lookback_period)
+            ]
+            if is_market_data.empty:
+                continue
+
+            is_returns = prepare_df_for_sharpe(is_market_data).loc[
+                ~prepare_df_for_sharpe(is_market_data).index.duplicated(keep="first")
+            ]
+            oos_returns = prepare_df_for_sharpe(oos_market_data)
+
+            if market_combined_is_returns is None:
+                market_combined_is_returns = is_returns
+            else:
+                market_combined_is_returns = market_combined_is_returns.add(
+                    is_returns, fill_value=0
+                )
+
+            if not oos_returns.empty:
+                if market_combined_oos_returns is None:
+                    market_combined_oos_returns = oos_returns
+                else:
+                    market_combined_oos_returns = market_combined_oos_returns.add(
+                        oos_returns, fill_value=0
+                    )
+
+            switch_date = oos_returns.index[0] if not oos_returns.empty else None
+            if switch_date is not None:
+                is_until_switch = is_returns[is_returns.index < switch_date]
+                is_then_oos_returns = pd.concat([is_until_switch, oos_returns])
+            else:
+                is_then_oos_returns = is_returns
+            if market_combined_is_then_oos_returns is None:
+                market_combined_is_then_oos_returns = is_then_oos_returns
+            else:
+                market_combined_is_then_oos_returns = (
+                    market_combined_is_then_oos_returns.add(
+                        is_then_oos_returns, fill_value=0
+                    )
+                )
+
+        if market_combined_is_returns is not None:
+            market_combined_is_returns = market_combined_is_returns.fillna(
+                0
+            ).sort_index()
+            is_report_path = output_dir / f"{market}_best_is_report.html"
+            qs.reports.html(
+                market_combined_is_returns,
+                output=is_report_path,
+                title=f"Combined IS Report for {market}",
+            )
+
+            if total_combined_is_returns is None:
+                total_combined_is_returns = market_combined_is_returns
+            else:
+                total_combined_is_returns = total_combined_is_returns.add(
+                    market_combined_is_returns, fill_value=0
+                )
+
+        if market_combined_oos_returns is not None:
+            market_combined_oos_returns = market_combined_oos_returns.fillna(
+                0
+            ).sort_index()
+            oos_report_path = output_dir / f"{market}_best_oos_report.html"
+            qs.reports.html(
+                market_combined_oos_returns,
+                output=oos_report_path,
+                title=f"Combined OOS Report for {market}",
+            )
+
+            if total_combined_oos_returns is None:
+                total_combined_oos_returns = market_combined_oos_returns
+            else:
+                total_combined_oos_returns = total_combined_oos_returns.add(
+                    market_combined_oos_returns, fill_value=0
+                )
+
+        if market_combined_is_then_oos_returns is not None:
+            market_combined_is_then_oos_returns = (
+                market_combined_is_then_oos_returns.fillna(0).sort_index()
+            )
+            is_then_oos_report_path = (
+                output_dir / f"{market}_best_is_then_oos_report.html"
+            )
+            qs.reports.html(
+                market_combined_is_then_oos_returns,
+                output=is_then_oos_report_path,
+                title=f"Combined IS then OOS Report for {market}",
+            )
+
+            if total_combined_is_then_oos_returns is None:
+                total_combined_is_then_oos_returns = market_combined_is_then_oos_returns
+            else:
+                total_combined_is_then_oos_returns = (
+                    total_combined_is_then_oos_returns.add(
+                        market_combined_is_then_oos_returns, fill_value=0
+                    )
+                )
+
+    if total_combined_is_returns is not None:
+        total_combined_is_returns = total_combined_is_returns.fillna(0).sort_index()
+        total_is_report_path = output_dir / f"all_returns_is.html"
+        qs.reports.html(
+            total_combined_is_returns,
+            output=total_is_report_path,
+            title=f"Total Combined IS Report",
+        )
+
+    if total_combined_oos_returns is not None:
+        total_combined_oos_returns = total_combined_oos_returns.fillna(0).sort_index()
+        total_oos_report_path = output_dir / f"all_returns_oos.html"
+        qs.reports.html(
+            total_combined_oos_returns,
+            output=total_oos_report_path,
+            title=f"Total Combined OOS Report",
+        )
+
+    if total_combined_is_then_oos_returns is not None:
+        total_combined_is_then_oos_returns = total_combined_is_then_oos_returns.fillna(
+            0
+        ).sort_index()
+        total_is_then_oos_report_path = output_dir / f"all_returns_is_then_oos.html"
+        qs.reports.html(
+            total_combined_is_then_oos_returns,
+            output=total_is_then_oos_report_path,
+            title=f"Total Combined IS then OOS Report",
+        )
+
+
 if __name__ == "__main__":
     cfg = load_config()
 
@@ -269,3 +526,4 @@ if __name__ == "__main__":
 
     generate_quantstats_reports_specific(cfg, is_df.copy(), oos_df.copy())
     generate_quantstats_reports(cfg, is_df.copy(), oos_df.copy())
+    combine_systems(cfg, is_df.copy(), oos_df.copy())
