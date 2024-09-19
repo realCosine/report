@@ -4,13 +4,21 @@ import logging
 import yaml
 from pydantic import ValidationError
 
-from .report_config import Config, ReportConfig
-from ...core_config import CoreConfig 
+from core_config.core_config_loader import load_core_config
+from report.config import *
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def load_config() -> Config:
+def get_report_config_path():
+    """
+    Returns the absolute path to the report_config.yaml file.
+    """
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(current_dir, "report_config.yaml")
+
+
+def load_report_config() -> Config:
     """
     Loads and validates configuration from core_config.yaml and report_config.yaml files.
     
@@ -22,49 +30,26 @@ def load_config() -> Config:
         yaml.YAMLError: If any configuration file contains invalid YAML.
         pydantic.ValidationError: If the configuration does not conform to the Pydantic models.
     """
+    core_config = load_core_config()
+
     current_dir = os.path.dirname(__file__)
-    core_path = os.path.abspath(
-        os.path.join(current_dir, "..", "..", "core_config.yaml")
-    )
-    report_path = os.path.join(current_dir, "report_config.yaml")
-
-    if not os.path.exists(core_path):
-        logger.error(f"Global config file not found: {core_path}")
-        raise FileNotFoundError(f"Global config file not found: {core_path}")
-    if not os.path.exists(report_path):
-        logger.error(f"Module config file not found: {report_path}")
-        raise FileNotFoundError(f"Module config file not found: {report_path}")
-
-    logger.info(f"Loading global configuration from {core_path}")
+    report_config_path = get_report_config_path()
     try:
-        with open(core_path, "r") as core_file:
-            core_data = yaml.safe_load(core_file)
+        with open(report_config_path, 'r') as file:
+            report_config = yaml.safe_load(file)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Config file not found at: {report_config_path}")
     except yaml.YAMLError as e:
-        logger.error(f"Error parsing core_config.yaml: {e}")
-        raise
+        raise RuntimeError(f"Error parsing YAML file at: {report_config_path}, Error: {e}")
 
     try:
-        core = CoreConfig(**core_data)
-    except ValidationError as e:
-        logger.error(f"Validation error in core_config.yaml: {e}")
-        raise
-
-    logger.info(f"Loading module-specific configuration from {report_path}")
-    try:
-        with open(report_path, "r") as report_file:
-            report_data = yaml.safe_load(report_file)
-    except yaml.YAMLError as e:
-        logger.error(f"Error parsing report_config.yaml: {e}")
-        raise
-
-    try:
-        report = ReportConfig(**report_data)
+        report = ReportConfig(**report_config)
     except ValidationError as e:
         logger.error(f"Validation error in report_config.yaml: {e}")
         raise
 
     try:
-        config = Config(core=core, report=report)
+        config = Config(core=core_config, report=report)
     except ValidationError as e:
         logger.error(f"Error combining configurations into Config: {e}")
         raise
