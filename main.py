@@ -100,7 +100,7 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
         if market in add_periods and add_periods[market] != "?":
             best_periods[market] = {
                 "lookback_period": int(add_periods[market]),
-                "sharpe": None
+                "sharpe": None,
             }
             continue
 
@@ -142,14 +142,14 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
         if best_lookback_period is not None:
             best_periods[market] = {
                 "lookback_period": int(best_lookback_period),
-                "sharpe": round(best_combined_sharpe, 3)
+                "sharpe": round(best_combined_sharpe, 3),
             }
     best_periods_file_path = cfg.core.output_dir / "best_periods.json"
     with open(best_periods_file_path, "w") as json_file:
         json.dump(best_periods, json_file, indent=4)
 
     print("best_periods.json stored")
-    
+
     for market, data in best_periods.items():
         best_lookback_period = data["lookback_period"]
 
@@ -268,67 +268,69 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
         )
 
 
-def combine_systems(cfg: Config, main_is_df: pd.DataFrame, main_oos_df: pd.DataFrame):
+def combine_systems(cfg: Config):
     """
     Combines multiple systems' in-sample and out-of-sample DataFrames to generate
     aggregated QuantStats reports per market.
 
     Args:
         cfg (Config): Configuration object containing report settings.
-        main_is_df (pd.DataFrame): Main in-sample DataFrame.
-        main_oos_df (pd.DataFrame): Main out-of-sample DataFrame.
     """
     if not cfg.report.combine_systems.enable:
         return
 
-    other_dirs = cfg.report.combine_systems.other_systems_dirs
+    systems_cfg = cfg.report.combine_systems.systems_config
     output_dir = cfg.report.output_dir_combined
 
     systems = []
-    systems.append(
-        {"path": cfg.core.output_dir, "is_df": main_is_df, "oos_df": main_oos_df}
-    )
 
-    for dir_path in other_dirs:
-        is_path = dir_path / cfg.core.is_file_name
-        oos_path = dir_path / cfg.core.oos_file_name
+    for system_dir, system_config in systems_cfg.items():
+        risk = float(system_config.risk)
+        add_periods = system_config.add
+        remove_markets = system_config.remove
+
+        is_path = system_dir / cfg.core.is_file_name
+        oos_path = system_dir / cfg.core.oos_file_name
 
         if not is_path.exists() or not oos_path.exists():
             print(
-                f"Missing is_data.csv or oos_data.csv in {dir_path}. Skipping this system."
+                f"Missing is_data.csv or oos_data.csv in {system_dir}. Skipping this system."
             )
             continue
 
         system_is_df = pd.read_csv(is_path, parse_dates=True, index_col=0)
         system_oos_df = pd.read_csv(oos_path, parse_dates=True, index_col=0)
 
+        system_is_df["ProfitPercent"] *= risk
+        system_oos_df["ProfitPercent"] *= risk
+
         systems.append(
             {
-                "path": dir_path,
+                "path": system_dir,
                 "is_df": system_is_df,
                 "oos_df": system_oos_df,
+                "add_periods": add_periods,
+                "remove_markets": remove_markets,
             }
         )
 
     best_periods = {}
     for system in systems:
-        add_periods = cfg.report.specific.add
-        remove_markets = cfg.report.specific.remove
-
         system_path = system["path"]
         is_df = system["is_df"]
         oos_df = system["oos_df"]
+        add_periods = system["add_periods"]
+        remove_markets = system["remove_markets"]
 
         for market in is_df["Market"].unique():
-            if system is cfg.core.output_dir:
-                if market in remove_markets:
-                    continue
+            if remove_markets is not None and market in remove_markets:
+                continue
 
-                if market in add_periods and add_periods[market] is not "?":
-                    if market not in best_periods:
-                        best_periods[market] = {}
-                        best_periods[market][system_path] = int(best_lookback_period)
-                        continue
+            if market in add_periods and add_periods[market] != "?":
+                if market not in best_periods:
+                    best_periods[market] = {}
+                best_periods[market][system_path] = int(add_periods[market])
+                continue
 
             best_lookback_period = None
             best_combined_sharpe = float("-inf")
@@ -370,11 +372,7 @@ def combine_systems(cfg: Config, main_is_df: pd.DataFrame, main_oos_df: pd.DataF
                             best_lookback_period = lookback_period
 
             if best_lookback_period is not None:
-                if market not in best_periods:
-                    best_periods[market] = {}
-
-                if best_lookback_period is not None:
-                    best_periods[market][system_path] = int(best_lookback_period)
+                best_periods.setdefault(market, {})[system_path] = int(best_lookback_period)
 
     best_periods_file_path = output_dir / "best_periods.json"
     with open(best_periods_file_path, "w") as json_file:
@@ -540,4 +538,4 @@ if __name__ == "__main__":
 
     generate_quantstats_reports_specific(cfg, is_df.copy(), oos_df.copy())
     generate_quantstats_reports(cfg, is_df.copy(), oos_df.copy())
-    combine_systems(cfg, is_df.copy(), oos_df.copy())
+    combine_systems(cfg)

@@ -1,10 +1,19 @@
 generate_general: false
-generate_specific: true
+generate_specific: false
 specific:
-  add: {"6A": "?", "HO": "14", "SI": "?"}
-  remove: ["NG"]
+  add: {"6A": "?", "HO": "?", "SI": "?"}
+  remove: ["-"]
 
 combine_systems:
-  enable: false
-  other_systems_dirs: 
-    - "/root/dev/VPAlgo-LimitH2-V1/results/V1.0/V5.0 mit Zeitfilter Sharpe als Berechnung"
+  enable: true
+  systems_config: 
+    "/root/dev/VPAlgo-LimitH2-V1/results/V1.0/V5.0 mit Zeitfilter Sharpe als Berechnung": 
+      risk: "0.5"
+      add:
+        "HO": "?"
+    "/root/dev/VPAlgo-LimitH2-V2/results/V5.0 Entry als Ankerpunkt zur TP-Berechnung/V3.0 Mit ZeitFilter, Mit Sharpe": 
+      risk: "1"
+      add:
+        "HO": "14"
+      remove:
+        - "NG"

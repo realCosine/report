@@ -11,11 +11,16 @@ class SpecificConfig(BaseModel):
         default_factory=list, description="Markets to remove from specific report"
     )
 
+class SystemConfig(BaseModel):
+    risk: float = Field(..., description="Risk factor for the system")
+    add: Dict[str, str] = Field(..., description="Markets to add with specific lookback periods")
+    remove: Optional[List[str]] = Field(None, description="Markets to remove from the report")
+
 
 class CombineSystemsConfig(BaseModel):
     enable: bool = Field(..., description="Flag to combine systems")
-    other_systems_dirs: List[DirectoryPath] = Field(
-        ..., description="Paths to other systems"
+    systems_config: Dict[DirectoryPath, SystemConfig] = Field(
+        ..., description="Paths to other systems, and their configurations (risk, add, remove)"
     )
 
 
