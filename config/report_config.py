@@ -4,10 +4,10 @@ from ...core_config import CoreConfig
 
 
 class SpecificConfig(BaseModel):
-    add_markets: Dict[str, str] = Field(
+    add: Dict[str, str] = Field(
         default_factory=dict, description="Markets to add for specific report"
     )
-    remove_markets: List[str] = Field(
+    remove: List[str] = Field(
         default_factory=list, description="Markets to remove from specific report"
     )
 

@@ -80,15 +80,14 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
         return
 
     specific_dir = cfg.report.output_dir_specific
-    add_periods = cfg.report.specific.add_markets
-    remove_markets = cfg.report.specific.remove_markets
+    add_periods = cfg.report.specific.add
+    remove_markets = cfg.report.specific.remove
 
     best_periods = {}
     all_returns_is = None
     all_returns_oos = None
     all_returns_is_then_oos = None
-
-    cutoff_date = datetime.now() - timedelta(days=365 * 2)
+    all_returns_is_until_oos = None
 
     for market in is_df["Market"].unique():
 
@@ -98,8 +97,11 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
         best_lookback_period = None
         best_combined_sharpe = float("-inf")
 
-        if market in add_periods:
-            best_periods[market] = int(add_periods[market])
+        if market in add_periods and add_periods[market] != "?":
+            best_periods[market] = {
+                "lookback_period": int(add_periods[market]),
+                "sharpe": None
+            }
             continue
 
         for lookback_period in is_df["IS_QuarterCount"].unique():
@@ -122,9 +124,6 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
             oos_returns = prepare_df_for_sharpe(oos_market_data)
 
             if not oos_returns.empty:
-                if oos_returns.index[-1] < cutoff_date:
-                    continue
-
                 switch_date = oos_returns.index[0]
                 is_then_oos_returns = pd.concat(
                     [is_returns[is_returns.index < switch_date], oos_returns]
@@ -133,7 +132,7 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
                 oos_sharpe = sharpe(oos_returns)
                 is_then_oos_sharpe = sharpe(is_then_oos_returns)
 
-                if oos_sharpe > 2 and is_then_oos_sharpe > 2:
+                if oos_sharpe > 2.5 and is_then_oos_sharpe > 2:
                     combined_sharpe = 0.6 * oos_sharpe + 0.4 * is_then_oos_sharpe
 
                     if combined_sharpe > best_combined_sharpe:
@@ -141,15 +140,19 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
                         best_lookback_period = lookback_period
 
         if best_lookback_period is not None:
-            best_periods[market] = int(best_lookback_period)
-
+            best_periods[market] = {
+                "lookback_period": int(best_lookback_period),
+                "sharpe": round(best_combined_sharpe, 3)
+            }
     best_periods_file_path = cfg.core.output_dir / "best_periods.json"
     with open(best_periods_file_path, "w") as json_file:
         json.dump(best_periods, json_file, indent=4)
 
     print("best_periods.json stored")
+    
+    for market, data in best_periods.items():
+        best_lookback_period = data["lookback_period"]
 
-    for market, best_lookback_period in best_periods.items():
         is_market_data = is_df[
             (is_df["Market"] == market)
             & (is_df["IS_QuarterCount"] == best_lookback_period)
@@ -196,6 +199,13 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
             ]
 
             if not is_until_oos_returns.empty:
+                if all_returns_is_until_oos is None:
+                    all_returns_is_until_oos = is_until_oos_returns
+                else:
+                    all_returns_is_until_oos = all_returns_is_until_oos.add(
+                        is_until_oos_returns, fill_value=0
+                    )
+
                 is_until_oos_report = (
                     specific_dir
                     / f"{market}_{best_lookback_period}_best_is_until_oos_report.html"
@@ -225,10 +235,6 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
             output=all_returns_is_path,
             title="All IS Returns (Best Lookback)",
         )
-
-        all_returns_is_until_oos = all_returns_is[
-            all_returns_is.index <= all_returns_oos.index.min()
-        ]
 
         if all_returns_is_until_oos is not None:
 
@@ -305,14 +311,25 @@ def combine_systems(cfg: Config, main_is_df: pd.DataFrame, main_oos_df: pd.DataF
         )
 
     best_periods = {}
-    cutoff_date = datetime.now() - timedelta(days=365 * 2)
-
     for system in systems:
+        add_periods = cfg.report.specific.add
+        remove_markets = cfg.report.specific.remove
+
         system_path = system["path"]
         is_df = system["is_df"]
         oos_df = system["oos_df"]
 
         for market in is_df["Market"].unique():
+            if system is cfg.core.output_dir:
+                if market in remove_markets:
+                    continue
+
+                if market in add_periods and add_periods[market] is not "?":
+                    if market not in best_periods:
+                        best_periods[market] = {}
+                        best_periods[market][system_path] = int(best_lookback_period)
+                        continue
+
             best_lookback_period = None
             best_combined_sharpe = float("-inf")
 
@@ -337,9 +354,6 @@ def combine_systems(cfg: Config, main_is_df: pd.DataFrame, main_oos_df: pd.DataF
                 oos_returns = prepare_df_for_sharpe(oos_market_data)
 
                 if not oos_returns.empty:
-                    if oos_returns.index[-1] < cutoff_date:
-                        continue
-
                     switch_date = oos_returns.index[0]
                     is_then_oos_returns = pd.concat(
                         [is_returns[is_returns.index < switch_date], oos_returns]

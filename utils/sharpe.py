@@ -13,7 +13,7 @@ def sharpe(returns, rf=0.0, periods=252, annualize=True, smart=False):
     divisor = returns.std(ddof=1)
 
     if divisor == 0:
-        return float("inf")
+        return float("-inf")
 
     if smart:
         divisor = divisor * qs.stats.autocorr_penalty(returns)
