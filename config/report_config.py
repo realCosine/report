@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 
 from report.config import *
 
+
 class SpecificConfig(BaseModel):
     add: Dict[str, str] = Field(
         default_factory=dict, description="Markets to add for specific report"
@@ -19,7 +20,6 @@ class ReportConfig(BaseModel):
 
     output_dir_general: Optional[DirectoryPath] = None
     output_dir_specific: Optional[DirectoryPath] = None
-    output_dir_combined: Optional[DirectoryPath] = None
 
     @field_validator("output_dir_general", "output_dir_specific", mode="before")
     def check_suffix_not_empty(cls, v):
