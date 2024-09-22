@@ -29,8 +29,8 @@ def load_report_config() -> Config:
         yaml.YAMLError: If any configuration file contains invalid YAML.
         pydantic.ValidationError: If the configuration does not conform to the Pydantic models.
     """
-    from core_config.main import load_core_config
-    from utils.config_utils import load_yaml_config
+    from core_config import load_core_config
+    from utils import load_yaml_config
 
     core_config = load_core_config()
 

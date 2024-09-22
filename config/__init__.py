@@ -1,2 +1,2 @@
-from core_config.main import CoreConfig
+from core_config import CoreConfig
 from report.config.report_config import Config, ReportConfig
