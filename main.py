@@ -226,42 +226,42 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
 
     if all_returns_is is not None:
         all_returns_is = all_returns_is.fillna(0).sort_index()
-        all_returns_is_path = specific_dir / "_all_returns_is.html"
+        all_returns_is_dir = specific_dir / "_all_returns_is.html"
 
         qs.reports.html(
             all_returns_is,
-            output=all_returns_is_path,
+            output=all_returns_is_dir,
             title="All IS Returns (Best Lookback)",
         )
 
         if all_returns_is_until_oos is not None:
 
-            all_returns_is_until_oos_path = (
+            all_returns_is_until_oos_dir = (
                 specific_dir / "_all_returns_is_until_oos.html"
             )
             qs.reports.html(
                 all_returns_is_until_oos,
-                output=all_returns_is_until_oos_path,
+                output=all_returns_is_until_oos_dir,
                 title="All IS Returns until OOS begins (Best Lookback)",
             )
 
     if all_returns_is_then_oos is not None:
         all_returns_is_then_oos = all_returns_is_then_oos.fillna(0).sort_index()
-        all_returns_is_then_oos_path = specific_dir / "_all_returns_is_then_oos.html"
+        all_returns_is_then_oos_dir = specific_dir / "_all_returns_is_then_oos.html"
 
         qs.reports.html(
             all_returns_is_then_oos,
-            output=all_returns_is_then_oos_path,
+            output=all_returns_is_then_oos_dir,
             title="All IS then OOS Returns (Best Lookback)",
         )
 
     if all_returns_oos is not None:
         all_returns_oos = all_returns_oos.fillna(0).sort_index()
-        all_returns_oos_path = specific_dir / "_all_returns_oos.html"
+        all_returns_oos_dir = specific_dir / "_all_returns_oos.html"
 
         qs.reports.html(
             all_returns_oos,
-            output=all_returns_oos_path,
+            output=all_returns_oos_dir,
             title="All OOS Returns (Best Lookback)",
         )
 
