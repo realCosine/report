@@ -3,3 +3,10 @@ generate_specific: true
 specific:
   add: {} # Example: {"6A": "14", "HO": "?"} 
   remove: [] # Example: ["NG", "CL"]
+
+html_merger:
+  systems:
+    - "/root/dev/VPAlgo-LimitH2-V2/results/V2.1.0b/V1.0/report_specific 2.5er sharpe min"
+    - "/root/dev/VPAlgo-LimitH2-V2/results/V2.1.1b/V1.0/report_specific"
+    - "/root/dev/VPAlgo-LimitH2-V2/results/V5.0a Entry als Ankerpunkt zur TP-Berechnung/V3.0 Mit ZeitFilter, Mit Sharpe/report_specific"
+  output_dir: "/root/dev/VPAlgo-LimitH2-V2/results/html merger/V2.1.0b, V2.1.1b, V2.0_V5.0a"

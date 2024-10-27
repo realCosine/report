@@ -41,6 +41,7 @@ class Config(BaseModel):
         self.core.output_dir = base_dir / self.core.output_name
         self.core.is_dir = self.core.output_dir / self.core.is_file_name
         self.core.oos_dir = self.core.output_dir / self.core.oos_file_name
+        self.core.parameters_dir = self.core.output_dir / self.core.parameters_file_name
 
         self.report.output_dir_general = self.core.output_dir / "report"
         self.report.output_dir_specific = self.core.output_dir / "report_specific"

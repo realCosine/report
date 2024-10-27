@@ -130,8 +130,10 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
                 oos_sharpe = sharpe(oos_returns)
                 is_then_oos_sharpe = sharpe(is_then_oos_returns)
 
-                if oos_sharpe > 2.5 and is_then_oos_sharpe > 2:
-                    combined_sharpe = 0.6 * oos_sharpe + 0.4 * is_then_oos_sharpe
+                if is_valid_sharpe(oos_sharpe, is_then_oos_sharpe, threshold=2):
+                    combined_sharpe = calculate_combined_sharpe(
+                        oos_sharpe, is_then_oos_sharpe
+                    )
 
                     if combined_sharpe > best_combined_sharpe:
                         best_combined_sharpe = combined_sharpe
@@ -142,6 +144,18 @@ def generate_quantstats_reports_specific(cfg: Config, is_df, oos_df):
                 "lookback_period": int(best_lookback_period),
                 "sharpe": round(best_combined_sharpe, 3),
             }
+
+    parameters_df = pd.read_csv(cfg.core.parameters_dir)
+    parameters_df = parameters_df[parameters_df["Market"].isin(best_periods.keys())]
+    parameters_df = parameters_df[
+        parameters_df.apply(
+            lambda row: row["IS_QuarterCount"]
+            == best_periods[row["Market"]]["lookback_period"],
+            axis=1,
+        )
+    ]
+    parameters_df.to_csv(cfg.core.output_dir / "selected_parameters.csv", index=False)
+
     best_periods_file_path = cfg.core.output_dir / "best_periods.json"
     with open(best_periods_file_path, "w") as json_file:
         json.dump(best_periods, json_file, indent=4)
