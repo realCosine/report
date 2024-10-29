@@ -1,4 +1,4 @@
-generate_general: false
+generate_general: true
 generate_specific: true
 specific:
   add: {} # Example: {"6A": "14", "HO": "?"} 
